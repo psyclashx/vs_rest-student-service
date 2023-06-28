@@ -1,17 +1,24 @@
 package service;
 
 import app.OTHRestException;
+import app.Server;
+import com.hazelcast.core.ReplicatedMap;
+import entity.Adresse;
 import entity.Student;
 
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
+
+import java.sql.*;
 import java.util.Collection;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import static app.Server.*;
 
 @Path("studentaffairs")  // alternativer Pfad: @Path("studentaffairs/students") --> ersetzt dann alle @Path-Annotationen unten
 public class StudentService {
@@ -28,6 +35,7 @@ public class StudentService {
         s.setMatrikelNr(nextStudentId.getAndIncrement());
         studentDb.put(s.getMatrikelNr(), s);
         return s;
+
 
     }
 
@@ -58,12 +66,49 @@ public class StudentService {
     @Path("students/{id}")
     public Student getStudentById(@PathParam("id") int studentId) {
 
-        Student student = studentDb.get(studentId);
+        Student s = null;
+        Connection c = null;
 
-        if(student != null)
+        //Replicated map students, zeigt auf das IMDG
+        ReplicatedMap<Integer, Student> students = hazelcast.getReplicatedMap("students");
+        //              key    value
+
+
+        Student student = students.get(studentId);
+
+        if(student != null) {
+            System.out.println("Student in Data Grid gefunden: " + student);
             return student;
-        else
-            throw new OTHRestException(404, "Student mit ID " + studentId + " ist nicht immatrikuliert");
+        }
+
+        try {
+            c = DriverManager.getConnection(DB_CONNECTION, DB_USERNAME, DB_PASSWORD);
+            Statement statement = c.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
+            String query = "SELECT vorname, nachname, strasse, ort FROM Student WHERE matrikelNr=" + studentId;
+            ResultSet result = statement.executeQuery(query);
+            if(result.first()) {
+                s = new Student(
+                        studentId,
+                        result.getString("vorname"),
+                        result.getString("nachname"),
+                        new Adresse(
+                                result.getString("strasse"),
+                                result.getString("ort")
+                        ));
+            } else {
+                throw new OTHRestException(404, "Student mit ID " + studentId + " ist nicht immatrikuliert");
+            }
+            c.close();
+
+            students.put(s.getMatrikelNr(), s, 5L, TimeUnit.MINUTES);
+            System.out.println("Student aus  Datenbank gelesen: " + s);
+
+
+            return s;
+
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
 
     }
 

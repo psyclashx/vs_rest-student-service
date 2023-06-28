@@ -4,11 +4,13 @@ import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlAttribute;
 import jakarta.xml.bind.annotation.XmlRootElement;
+
+import java.io.Serializable;
 import java.util.Objects;
 
 @XmlRootElement
-@XmlAccessorType(XmlAccessType.PROPERTY)
-public class Student {
+@XmlAccessorType(XmlAccessType.FIELD)
+public class Student implements Serializable {
 
     private int matrikelNr;
     private String vorname;
@@ -28,7 +30,11 @@ public class Student {
         this.matrikelNr = matrikelNr;
     }
 
-    @XmlAttribute
+    public Student(int studentId, String vorname, String nachname, Adresse adresse) {
+
+    }
+
+
     public int getMatrikelNr() {
         return matrikelNr;
     }
